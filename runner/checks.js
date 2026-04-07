@@ -1,3 +1,5 @@
+const defaults = require("./defaults");
+
 /**
  * ロケータ定義からPlaywrightロケータを生成する
  * { text: "..." } → getByText
@@ -47,23 +49,24 @@ async function checkConsoleErrors(page, consoleErrors, uncaughtErrors) {
   };
 }
 
-async function checkElementsExist(page, elements) {
+async function checkElementsExist(page, elements, config = {}) {
   if (!elements) {
     return { name: "要素存在確認", pass: true, detail: "チェック対象なし", items: [] };
   }
 
+  const t = Object.assign({}, defaults.timeout, config.timeout);
   const items = [];
 
   if (elements.tags) {
     for (const tag of elements.tags) {
-      const found = await page.locator(tag).first().waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false);
+      const found = await page.locator(tag).first().waitFor({ state: "visible", timeout: t.element }).then(() => true).catch(() => false);
       items.push({ target: `<${tag}>`, pass: found });
     }
   }
 
   if (elements.texts) {
     for (const text of elements.texts) {
-      const found = await page.getByText(text, { exact: false }).first().waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false);
+      const found = await page.getByText(text, { exact: false }).first().waitFor({ state: "visible", timeout: t.element }).then(() => true).catch(() => false);
       items.push({ target: `"${text}"`, pass: found });
     }
   }
@@ -77,11 +80,12 @@ async function checkElementsExist(page, elements) {
   };
 }
 
-async function checkElementToggle(page, toggles) {
+async function checkElementToggle(page, toggles, config = {}) {
   if (!toggles || toggles.length === 0) {
     return { name: "要素開閉確認", pass: true, detail: "チェック対象なし", items: [] };
   }
 
+  const t = Object.assign({}, defaults.timeout, config.timeout);
   const items = [];
 
   for (const toggle of toggles) {
@@ -90,15 +94,15 @@ async function checkElementToggle(page, toggles) {
 
     try {
       const triggerLocator = resolveLocator(page, toggle.trigger).first();
-      await triggerLocator.click({ timeout: 5000, force: toggle.trigger.force || false });
+      await triggerLocator.click({ timeout: t.action, force: toggle.trigger.force || false });
 
       const expectLocator = resolveLocator(page, toggle.expect).first();
 
       let pass;
       if (expectVisible) {
-        pass = await expectLocator.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+        pass = await expectLocator.waitFor({ state: "visible", timeout: t.action }).then(() => true).catch(() => false);
       } else {
-        pass = await expectLocator.waitFor({ state: "hidden", timeout: 5000 }).then(() => true).catch(() => false);
+        pass = await expectLocator.waitFor({ state: "hidden", timeout: t.action }).then(() => true).catch(() => false);
       }
 
       const expectDesc = describeLocator(toggle.expect);
@@ -128,11 +132,12 @@ async function checkElementToggle(page, toggles) {
   };
 }
 
-async function checkLinkNavigation(page, navigations, originUrl) {
+async function checkLinkNavigation(page, navigations, originUrl, config = {}) {
   if (!navigations || navigations.length === 0) {
     return { name: "リンク遷移確認", pass: true, detail: "チェック対象なし", items: [] };
   }
 
+  const t = Object.assign({}, defaults.timeout, config.timeout);
   const items = [];
 
   for (const nav of navigations) {
@@ -142,7 +147,7 @@ async function checkLinkNavigation(page, navigations, originUrl) {
       const triggerLocator = resolveLocator(page, nav.trigger).first();
 
       await Promise.all([
-        page.waitForFunction((origin) => window.location.href !== origin, originUrl, { timeout: 5000 }),
+        page.waitForFunction((origin) => window.location.href !== origin, originUrl, { timeout: t.action }),
         triggerLocator.click({ force: nav.trigger.force || false }),
       ]);
 
@@ -161,8 +166,8 @@ async function checkLinkNavigation(page, navigations, originUrl) {
     }
 
     // 次のナビゲーションのために元のページに戻る
-    await page.goto(originUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForTimeout(500);
+    await page.goto(originUrl, { waitUntil: "domcontentloaded", timeout: t.goto });
+    await page.waitForTimeout(t.navReturn);
   }
 
   const failCount = items.filter((i) => !i.pass).length;
@@ -174,7 +179,7 @@ async function checkLinkNavigation(page, navigations, originUrl) {
   };
 }
 
-async function checkFormSubmit(page, form, originUrl) {
+async function checkFormSubmit(page, form, originUrl, config = {}) {
   if (!form || !form.fields || !form.submit) {
     return { name: "フォーム送信確認", pass: true, detail: "チェック対象なし", items: [] };
   }
@@ -191,6 +196,8 @@ async function checkFormSubmit(page, form, originUrl) {
     }
   }
 
+  const t = Object.assign({}, defaults.timeout, config.timeout);
+
   if (items.some((i) => !i.pass)) {
     const failCount = items.filter((i) => !i.pass).length;
     return {
@@ -204,7 +211,7 @@ async function checkFormSubmit(page, form, originUrl) {
   // 送信ボタンをクリック
   try {
     const submitLocator = resolveLocator(page, form.submit).first();
-    await submitLocator.click({ timeout: 5000 });
+    await submitLocator.click({ timeout: t.action });
     items.push({ target: "送信ボタン", pass: true, detail: "クリック成功" });
   } catch (error) {
     items.push({ target: "送信ボタン", pass: false, detail: error.message });
@@ -221,7 +228,7 @@ async function checkFormSubmit(page, form, originUrl) {
   if (form.expect) {
     if (form.expect.url_contains) {
       const passed = await page
-        .waitForFunction((origin) => window.location.href !== origin, originUrl, { timeout: 5000 })
+        .waitForFunction((origin) => window.location.href !== origin, originUrl, { timeout: t.action })
         .then(() => page.url().includes(form.expect.url_contains))
         .catch(() => false);
       items.push({
@@ -237,7 +244,7 @@ async function checkFormSubmit(page, form, originUrl) {
       const passed = await page
         .getByText(form.expect.text, { exact: false })
         .first()
-        .waitFor({ state: "visible", timeout: 5000 })
+        .waitFor({ state: "visible", timeout: t.action })
         .then(() => true)
         .catch(() => false);
       items.push({

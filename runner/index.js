@@ -1,6 +1,7 @@
 const { chromium } = require("playwright");
 const { checkHttpStatus, checkConsoleErrors, checkElementsExist, checkElementToggle, checkLinkNavigation, checkFormSubmit } = require("./checks");
 const { printSummary, writeMarkdownReport } = require("./reporter");
+const defaults = require("./defaults");
 const fs = require("fs");
 const path = require("path");
 
@@ -30,6 +31,11 @@ async function takeScreenshot(page, scenario, runDir) {
 }
 
 async function runScenario(browser, baseUrl, scenario, options) {
+  // シナリオの timeout フィールドで defaults を上書き可能（浅いマージ）
+  const config = {
+    timeout: Object.assign({}, defaults.timeout, scenario.timeout || {}),
+  };
+
   const contextOptions = scenario.viewport ? { viewport: scenario.viewport } : {};
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
@@ -58,10 +64,10 @@ async function runScenario(browser, baseUrl, scenario, options) {
   try {
     const response = await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: 30000,
+      timeout: config.timeout.goto,
     });
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(config.timeout.pageLoad);
 
     for (const checkName of scenario.checks) {
       let checkResult;
@@ -71,13 +77,13 @@ async function runScenario(browser, baseUrl, scenario, options) {
       } else if (checkName === "console_errors") {
         checkResult = await checkConsoleErrors(page, consoleErrors, uncaughtErrors);
       } else if (checkName === "elements_exist") {
-        checkResult = await checkElementsExist(page, scenario.elements);
+        checkResult = await checkElementsExist(page, scenario.elements, config);
       } else if (checkName === "element_toggle") {
-        checkResult = await checkElementToggle(page, scenario.toggles);
+        checkResult = await checkElementToggle(page, scenario.toggles, config);
       } else if (checkName === "link_navigation") {
-        checkResult = await checkLinkNavigation(page, scenario.navigations, url);
+        checkResult = await checkLinkNavigation(page, scenario.navigations, url, config);
       } else if (checkName === "form_submit") {
-        checkResult = await checkFormSubmit(page, scenario.form, url);
+        checkResult = await checkFormSubmit(page, scenario.form, url, config);
       } else {
         checkResult = { name: checkName, pass: false, detail: "未知のチェック種別" };
       }
@@ -126,9 +132,10 @@ async function run(targetUrl, options = {}) {
   const runDir = path.join(process.cwd(), "results", siteName, runTimestamp);
 
   const headless = options.headless || false;
+  const slowMo = options.slowMo ?? defaults.browser.slowMo;
   const launchOptions = headless
     ? { headless: true }
-    : { headless: false, slowMo: 500 };
+    : { headless: false, slowMo };
 
   console.log(`モード: ${headless ? "headless" : "ブラウザ表示あり (slowMo: 500)"}\n`);
 

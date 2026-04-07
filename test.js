@@ -24,6 +24,10 @@ function parseArgs() {
       options.screenshot = args[i + 1];
       i++;
     }
+    if (args[i] === "--slow-mo" && args[i + 1]) {
+      options.slowMo = parseInt(args[i + 1], 10);
+      i++;
+    }
   }
 
   return options;
@@ -42,6 +46,7 @@ async function main() {
     scenarios: options.scenarios,
     headless: options.headless,
     screenshot: options.screenshot || "fail",
+    slowMo: options.slowMo,
   });
   process.exit(summary.allPass ? 0 : 1);
 }
