@@ -93,6 +93,10 @@ async function checkElementToggle(page, toggles, config = {}) {
     const expectVisible = toggle.expect.visible !== false;
 
     try {
+      if (toggle.hover) {
+        await resolveLocator(page, toggle.hover).first().hover();
+        await page.waitForTimeout(t.hoverWait);
+      }
       const triggerLocator = resolveLocator(page, toggle.trigger).first();
       await triggerLocator.click({ timeout: t.action, force: toggle.trigger.force || false });
 
@@ -144,6 +148,10 @@ async function checkLinkNavigation(page, navigations, originUrl, config = {}) {
     const desc = nav.description || describeLocator(nav.trigger);
 
     try {
+      if (nav.hover) {
+        await resolveLocator(page, nav.hover).first().hover();
+        await page.waitForTimeout(t.hoverWait);
+      }
       const triggerLocator = resolveLocator(page, nav.trigger).first();
 
       await Promise.all([
