@@ -193,6 +193,12 @@ async function crawlSite(browser, baseUrl, maxPages) {
     console.log("\nリンクを探索中...");
     const discovered = await discoverLinks(page, baseUrl);
 
+    // 発見したナビリンクをトップページのデータに追加（link_navigation生成に使用）
+    topData.navLinks = discovered.map(({ url, text }) => ({
+      text,
+      urlContains: urlToPath(url),
+    }));
+
     for (const { url, text } of discovered) {
       if (visitedUrls.size >= maxPages) break;
       if (visitedUrls.has(url)) continue;
@@ -227,6 +233,16 @@ function buildScenario(name, pagePath, pageData) {
     scenario.elements = {};
     if (hasTags) scenario.elements.tags = pageData.tags;
     if (hasTexts) scenario.elements.texts = pageData.headings.slice(0, 5);
+  }
+
+  // link_navigation
+  if (pageData.navLinks?.length > 0) {
+    checks.push("link_navigation");
+    scenario.navigations = pageData.navLinks.map(({ text, urlContains }) => ({
+      description: `「${text}」クリック → URL変化確認`,
+      trigger: { text },
+      expect: { url_contains: urlContains },
+    }));
   }
 
   // element_toggle
